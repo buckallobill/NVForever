@@ -6,7 +6,7 @@
 //!   (`crate::blackjack`'s `scripts_open`); it goes by "Poker Table" ([`name`]), and the
 //!   engine draws a poker table's top over its blackjack felt (nvforever `poker_view.rs`).
 //! - Poker plays for caps at every table; the casino gives the cards and the felt.
-//! - **Off by default** [design]: the setting `poker-tables` (Gameplay > Game) turns the
+//! - **Off by default** [design]: the setting `poker-tables` (NVF Features > Gameplay) turns the
 //!   swap on; off, every table is the original's blackjack table.
 
 use crate::poker::Casino;

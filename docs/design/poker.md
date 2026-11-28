@@ -129,7 +129,7 @@ read off the pictures by eye [observed]; the code names the rectangles.
 casinos' placed blackjack tables into poker tables: two of the Ultra-Luxe's six, one of
 Gomorrah's four and one of the Tops' three. They are picked by rule, not by FormID (`poker_tables::swapped`): the placed references to each casino's `BlackjackTable*` base object, the ones lying furthest toward one side (the Ultra-Luxe's two northmost, Gomorrah's westmost, the Tops' southmost) [design].
 
-- Off by default: the setting `poker-tables` (Gameplay > Game, "Poker tables") turns the
+- Off by default: the setting `poker-tables` (NVF Features > Gameplay, "Poker tables") turns the
   swap on. Off, every table is the original's blackjack table.
 - On, a swapped table's script still asks for blackjack (ShowBlackJackMenuParams) and the
   engine opens poker at its casino instead; the crosshair names it "Poker Table" with

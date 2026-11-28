@@ -131,6 +131,9 @@ fn dress(
             if !on || drawn.is_empty() || !sim.present(r) {
                 if let Some(d) = dressed.remove(&r) {
                     commands.entity(d.holder).despawn();
+                    if !on {
+                        info!("poker view: {} poker table {r:#010X} taken down: the setting is off, its blackjack table shown again", casino.title());
+                    }
                 }
                 if !on {
                     for e in &drawn {

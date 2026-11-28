@@ -37820,3 +37820,63 @@ expect = [
 forbid = [
   { re = 'room beam census:', label = "the census is idle" },
 ]
+
+[[scenario]]
+name = "poker-tables-ultraluxe"
+source = "[design, #4762] engine/nvf-play/src/poker_tables.rs `RULES`, nvforever poker_view.rs `dress`: in ULCasino the row off leaves every blackjack table; turned on, its two northmost tables (0x0011887B, 0x00171653) become poker tables drawn in the blackjack table's place; turned off again, they are taken down"
+note = "Looking north at 0x0011887B from 260 units south. The row is turned on during a pause from 6 to 8 s and off again during one from 13 to 15 s (the settings aid's toggle), so the home's setting ends as it started. Shots: before (off), on, after (off)"
+areas = ["poker", "casino"]
+paths = ["engine/nvf-play/src/poker_tables.rs", "engine/nvforever/src/poker_view.rs"]
+env = { NVF_PLAY_TEST_SCRIPT_MENUS = "0.3", NVF_PLAY_TEST_PAUSE = "6:8,13:15", NVF_PLAY_TEST_SETTINGS = "7:poker-tables,14:poker-tables", NVF_PLAY_TEST_SHOTS = "5:poker_ultraluxe_off.png,11:poker_ultraluxe_on.png,18:poker_ultraluxe_off_again.png" }
+args = ["--cell", "ULCasino", "--play", "--no-voice", "--no-messages", "--pos=2677,3147,7656", "--heading", "0", "--pitch=-12"]
+run_seconds = 20
+expect = [
+  { re = 'poker view: The Ultra-Luxe poker table 0x(0011887B|00171653) drawn in its blackjack table', count = 2, label = "the swapped table(s) drawn as poker tables once the row is on" },
+  { re = 'poker view: The Ultra-Luxe poker table 0x(0011887B|00171653) taken down', count = 2, label = "taken down again with the row off" },
+]
+order = [["drawn in its blackjack table", "taken down"]]
+forbid = [
+  { re = 'poker view: (?!The Ultra-Luxe )[^:]* poker table 0x', label = "a table of another casino" },
+  { text = "the table's pictures are not in the archives", label = "the felt's pictures missing" },
+]
+manual = "poker_ultraluxe_off.png and poker_ultraluxe_off_again.png: the blackjack table; poker_ultraluxe_on.png: the oval poker top in its place"
+
+[[scenario]]
+name = "poker-tables-gomorrah"
+source = "[design, #4762] engine/nvf-play/src/poker_tables.rs `RULES`, nvforever poker_view.rs `dress`: in Gomorrah01 the row off leaves every blackjack table; turned on, its westmost table (0x001711A6) become poker tables drawn in the blackjack table's place; turned off again, they are taken down"
+note = "Looking north at 0x001711A6 from 260 units south. The row is turned on during a pause from 6 to 8 s and off again during one from 13 to 15 s (the settings aid's toggle), so the home's setting ends as it started. Shots: before (off), on, after (off)"
+areas = ["poker", "casino"]
+paths = ["engine/nvf-play/src/poker_tables.rs", "engine/nvforever/src/poker_view.rs"]
+env = { NVF_PLAY_TEST_SCRIPT_MENUS = "0.3", NVF_PLAY_TEST_PAUSE = "6:8,13:15", NVF_PLAY_TEST_SETTINGS = "7:poker-tables,14:poker-tables", NVF_PLAY_TEST_SHOTS = "5:poker_gomorrah_off.png,11:poker_gomorrah_on.png,18:poker_gomorrah_off_again.png" }
+args = ["--cell", "Gomorrah01", "--play", "--no-voice", "--no-messages", "--pos=3004,2751,6376", "--heading", "0", "--pitch=-12"]
+run_seconds = 20
+expect = [
+  { re = 'poker view: Gomorrah poker table 0x(001711A6) drawn in its blackjack table', count = 1, label = "the swapped table(s) drawn as poker tables once the row is on" },
+  { re = 'poker view: Gomorrah poker table 0x(001711A6) taken down', count = 1, label = "taken down again with the row off" },
+]
+order = [["drawn in its blackjack table", "taken down"]]
+forbid = [
+  { re = 'poker view: (?!Gomorrah )[^:]* poker table 0x', label = "a table of another casino" },
+  { text = "the table's pictures are not in the archives", label = "the felt's pictures missing" },
+]
+manual = "poker_gomorrah_off.png and poker_gomorrah_off_again.png: the blackjack table; poker_gomorrah_on.png: the oval poker top in its place"
+
+[[scenario]]
+name = "poker-tables-tops"
+source = "[design, #4762] engine/nvf-play/src/poker_tables.rs `RULES`, nvforever poker_view.rs `dress`: in TOPSCasino the row off leaves every blackjack table; turned on, its southmost table (0x00151E68) become poker tables drawn in the blackjack table's place; turned off again, they are taken down"
+note = "Looking north at 0x00151E68 from 260 units south. The row is turned on during a pause from 6 to 8 s and off again during one from 13 to 15 s (the settings aid's toggle), so the home's setting ends as it started. Shots: before (off), on, after (off)"
+areas = ["poker", "casino"]
+paths = ["engine/nvf-play/src/poker_tables.rs", "engine/nvforever/src/poker_view.rs"]
+env = { NVF_PLAY_TEST_SCRIPT_MENUS = "0.3", NVF_PLAY_TEST_PAUSE = "6:8,13:15", NVF_PLAY_TEST_SETTINGS = "7:poker-tables,14:poker-tables", NVF_PLAY_TEST_SHOTS = "5:poker_tops_off.png,11:poker_tops_on.png,18:poker_tops_off_again.png" }
+args = ["--cell", "TOPSCasino", "--play", "--no-voice", "--no-messages", "--pos=2660,783,8103", "--heading", "0", "--pitch=-12"]
+run_seconds = 20
+expect = [
+  { re = 'poker view: The Tops poker table 0x(00151E68) drawn in its blackjack table', count = 1, label = "the swapped table(s) drawn as poker tables once the row is on" },
+  { re = 'poker view: The Tops poker table 0x(00151E68) taken down', count = 1, label = "taken down again with the row off" },
+]
+order = [["drawn in its blackjack table", "taken down"]]
+forbid = [
+  { re = 'poker view: (?!The Tops )[^:]* poker table 0x', label = "a table of another casino" },
+  { text = "the table's pictures are not in the archives", label = "the felt's pictures missing" },
+]
+manual = "poker_tops_off.png and poker_tops_off_again.png: the blackjack table; poker_tops_on.png: the oval poker top in its place"

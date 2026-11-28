@@ -130,13 +130,14 @@ pub const MOBILE_SECTIONS: &[Section] = &[
 /// The rows the NVF Features tab may hold: only what the owner named there [design: owner
 /// 2026-11-15]. Adding a key needs the owner's word; a bigger gameplay change is offered to
 /// the owner for this tab, never moved here unasked (docs/design/settings-page.md).
-pub const NVF_FEATURES_KEYS: [&str; 16] = [
+pub const NVF_FEATURES_KEYS: [&str; 17] = [
     "advanced-movement",
     "movement-weight",
     "movement-inertia",
     "weapon-handling",
     "advanced-recoil",
     "sprint",
+    "poker-tables",
     "weapon-inertia",
     "animation-smoothing",
     "camera-motion",
@@ -159,7 +160,7 @@ pub const NVF_FEATURES_KEYS: [&str; 16] = [
 pub const SECTIONS: &[Section] = &[
     // #2688's sound cover with the game's own rules (a bigger gameplay change: NVF Features is the
     // owner's call, recommended to them, not moved there).
-    section("Gameplay", Some("Game"), &["difficulty", "difficulty-player-damage", "difficulty-npc-damage", "difficulty-kill-xp", "hardcore", "reload-slows", "UsePipBoy", "sound-cover", "poker-tables", "npc-weapon-mods", "sneak-bounding-box"]),
+    section("Gameplay", Some("Game"), &["difficulty", "difficulty-player-damage", "difficulty-npc-damage", "difficulty-kill-xp", "hardcore", "reload-slows", "UsePipBoy", "sound-cover", "npc-weapon-mods", "sneak-bounding-box"]),
     // "V.A.T.S." as the data spells it (MESG `HelpVATS`).
     section("Gameplay", Some("V.A.T.S."), &["vats-style", "vats-slowdown", "kill-camera"]),
     section("Gameplay", Some("Camera"), &["detached-camera", "true-iron-sights", "first-person-body", "weapon-lower", "gore-shake", "field-of-view", "viewmodel-field-of-view"]),
@@ -275,7 +276,7 @@ pub const SECTIONS: &[Section] = &[
     // The owner's own layout of the movement work (tech/movement-inertia, 2026-11-15).
     section(NVF_FEATURES_TAB, Some("Advanced Movement"), &["advanced-movement", "movement-weight"]),
     // Sprint after Advanced Recoil (#3000).
-    section(NVF_FEATURES_TAB, Some("Gameplay"), &["movement-inertia", "weapon-handling", "advanced-recoil", "sprint"]),
+    section(NVF_FEATURES_TAB, Some("Gameplay"), &["movement-inertia", "weapon-handling", "advanced-recoil", "sprint", "poker-tables"]),
     section(NVF_FEATURES_TAB, Some("Visual Only"), &["weapon-inertia", "animation-smoothing", "camera-motion"]),
     section(NVF_FEATURES_TAB, Some("World Interaction"), &["grass-fire"]),
     // The Quick Loot menu (docs/design/quick-loot.md) [design, #2933].
