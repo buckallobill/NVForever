@@ -37740,15 +37740,16 @@ forbid = [
 note = "Written 2026-11-26 (the volumetric rows under Physical lighting), replacing physical-lighting-no-volumetric; first run 2026-11-26 on vanilla data: PASS."
 
 [[scenario]]
-name = "emote-wheel-solo"
+name = "emote-wheel-hosted"
 source = "the emote wheel [design]: emotes from the game's idles played on the player's third-person body (engine/nvforever/src/emote_play.rs), the wheel and the loadout (engine/nvf-play/src/emotes.rs)"
 areas = ["coop", "animation"]
-paths = ["engine/nvf-play/src/emotes.rs", "engine/nvforever/src/emote_play.rs"]
-note = "Goodsprings outside, solo: from first person a wave (one-shot; the view goes to third person and back), a sit ended by the aid after 6 s (entry, loop, exit), push-ups ended after 5 s, then the wheel opened, pointed at slot 3 (Sit) and let go, and the sit ended by Emote tapped"
-env = { NVF_PLAY_TEST_EMOTE = "10:1st,12:wave,16:sit:6,28:pushups:5,40:wheel,40.5:pick=3,41:release,46:cancel" }
+paths = ["engine/nvf-play/src/emotes.rs", "engine/nvforever/src/emote_play.rs", "engine/nvf-play/src/coop_tables.rs"]
+note = "In a co-op session (a lobby hosted on UDP port 27995 with the matchmaking service in the game, NVF_COOP_SIGNAL=local; no guest needed): the emotes work only in one (owner decision 2026-11-28, #4875; emote-wheel-single-player shows them doing nothing outside). Goodsprings outside, solo: from first person a wave (one-shot; the view goes to third person and back), a sit ended by the aid after 6 s (entry, loop, exit), push-ups ended after 5 s, then the wheel opened, pointed at slot 3 (Sit) and let go, and the sit ended by Emote tapped"
+env = { NVF_PLAY_TEST_COOP = "on", NVF_COOP_HOST = "27995", NVF_COOP_SIGNAL = "local", NVF_PLAY_TEST_EMOTE = "10:1st,12:wave,16:sit:6,28:pushups:5,40:wheel,40.5:pick=3,41:release,46:cancel" }
 args = ["--cell", "Goodsprings", "--play", "--pos=-68375,4800,8700", "--no-voice"]
 run_seconds = 52
 expect = [
+  { re = 'co-op: hosting on UDP port 27995 \(encrypted', label = "the lobby opens: a co-op session" },
   { re = 'emotes: \d+ of \d+ available', label = "the emote list at startup" },
   { re = 'emotes: start wave .*the view goes to third person', label = "a wave from first person goes to third" },
   { re = 'emotes: end wave \(done\).*first person again', label = "the wave ends, first person again" },
@@ -37758,6 +37759,31 @@ expect = [
   { re = 'emotes: pushups exit \(test aid\)', label = "the push-ups get up" },
   { text = "emotes: wheel: slot 3 plays sit", label = "the wheel's slot 3 plays Sit" },
   { re = 'emotes: sit exit \(asked\)', label = "Emote tapped ends the sit" },
+]
+
+[[scenario]]
+name = "emote-wheel-single-player"
+source = "owner decision 2026-11-28 (#4875): nothing in the social layer works in single player; the emote wheel and pings are for co-op sessions only (engine/nvf-play/src/emotes.rs, world_marks.rs)"
+areas = ["coop", "animation"]
+paths = ["engine/nvf-play/src/emotes.rs", "engine/nvf-play/src/world_marks.rs", "engine/nvf-play/src/coop_tables.rs", "engine/nvforever/src/emote_play.rs"]
+note = "Goodsprings outside, single player (no lobby): the steps emote-wheel-hosted plays (a wave, a sit, the wheel opened, slot 3 picked and let go) each do nothing, and no emote starts."
+env = { NVF_PLAY_TEST_EMOTE = "10:1st,12:wave,16:sit:6,20:wheel,20.5:pick=3,21:release,24:cancel" }
+args = ["--cell", "Goodsprings", "--play", "--pos=-68375,4800,8700", "--no-voice"]
+run_seconds = 30
+expect = [
+  { re = 'emotes: \d+ of \d+ available', label = "the emote list at startup" },
+  { text = "emotes: wave: does nothing, not in a co-op session", label = "a wave does nothing" },
+  { text = "emotes: sit: does nothing, not in a co-op session", label = "a sit does nothing" },
+  { text = "emotes: wheel: does nothing, not in a co-op session", label = "the wheel does not open" },
+  { text = "emotes: pick=3: does nothing, not in a co-op session", label = "no slot is picked" },
+  { text = "emotes: release: does nothing, not in a co-op session", label = "letting go plays nothing" },
+]
+forbid = [
+  { text = "emotes: start ", label = "no emote starts" },
+  { text = "emotes: wheel open", label = "the wheel never opens" },
+  { text = "emotes: wheel: slot", label = "no slot plays" },
+  { text = "co-op: hosting", label = "no lobby: single player" },
+  { text = "panicked", label = "no panic" },
 ]
 
 [[scenario]]

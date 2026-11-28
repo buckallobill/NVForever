@@ -2,8 +2,13 @@
 
 The things players do with each other in a co-op session, on top of the network core
 ([coop-net-core](coop-net-core.md)) and world sync. Nothing here runs outside a session,
-except the emote wheel, which plays on your own body. Single player is unchanged. Every
-choice below is NVForever's own [design] unless a line says otherwise.
+the emote wheel and pings included: in single player Emote and Ping do nothing (owner
+decision 2026-11-28, #4875; `nvf_play::coop_tables::Tables::in_session`). Single player
+is unchanged. Duels and trade are accepted as described below (same ruling). Every choice
+below is NVForever's own [design] unless a line says otherwise.
+
+The players' actions are reliable items of kind `nvf_coop::action::ACTION` (0x40), after
+shared progress's 0x30-0x3F; the protocol is version 141 for them (`nvf_coop::net::VERSION`).
 
 ## Actions: how the games talk
 
@@ -82,6 +87,7 @@ A refused action is dropped and counted (`Session::guard_stats`). A guest's stat
   - fainter away from the crosshair, and kept at the screen's edge when off screen;
   - heard from its direction.
 - Marks stay off the HUD's own pieces (`safe_zone`).
+- Outside a co-op session Ping does nothing (owner decision 2026-11-28, #4875).
 
 ## Emotes (`nvf_play::emotes`, nvforever `emote_play.rs`)
 
@@ -91,6 +97,9 @@ A refused action is dropped and counted (`Session::guard_stats`). A guest's stat
   start as a default eight and are kept, one emote key per slot, in `emote-slots.txt` in
   NVForever's home. A screen to choose them is not part of this piece.
 - A DLC's clips play only with that DLC loaded. No mod's clips are read.
+- Only in a co-op session (owner decision 2026-11-28, #4875): in single player Emote does
+  nothing and the wheel never opens; a session ending closes the wheel and ends the emote
+  playing. Smoke: `emote-wheel-hosted` (a hosted lobby) and `emote-wheel-single-player`.
 
 ## Settings
 

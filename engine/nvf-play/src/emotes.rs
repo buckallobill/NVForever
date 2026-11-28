@@ -13,6 +13,11 @@
 //! - **The wheel**: Emote held (unbound until the player binds it) opens it in the weapon wheel's style; letting go on a
 //!   slice plays its emote; a tap ends the emote playing.
 //! - The emote itself is played by nvforever's `emote_play.rs` ([`EmoteAsk`]).
+//! - **Only in a co-op session** ([`crate::coop_tables::Tables::in_session`]): in single
+//!   player Emote does nothing, nor do the test aid's steps that would open the wheel or
+//!   play an emote; a session ending closes the wheel and ends the emote playing
+//!   ([`outside_session`]) [owner decision 2026-11-28, #4875: nothing in the social layer
+//!   works in single player].
 //!
 //! Log lines: `emotes: …`.
 //!
@@ -339,6 +344,29 @@ impl EmoteWheel {
     }
 }
 
+/// Outside a co-op session (`on` false; `was_on` the last frame's): the wheel shut, a held
+/// Emote let go. True when the session has just ended, so the emote playing is ended too.
+pub fn outside_session(w: &mut EmoteWheel, on: bool, was_on: &mut bool) -> bool {
+    let ended = *was_on && !on;
+    *was_on = on;
+    if on {
+        return false;
+    }
+    if w.wheel.take().is_some() {
+        info!("emotes: wheel closed: not in a co-op session");
+    }
+    w.held = None;
+    w.aid_open = false;
+    ended
+}
+
+/// A test aid step that uses the emotes (opens the wheel, points it, lets it go or plays
+/// an emote), which does nothing outside a co-op session; the view's steps, `close` and
+/// `cancel` do what they do anywhere.
+fn aid_step_needs_session(head: &str) -> bool {
+    !matches!(head, "1st" | "3rd" | "close" | "cancel")
+}
+
 /// `NVF_PLAY_TEST_EMOTE`.
 #[derive(Resource, Default)]
 struct EmoteAid(Vec<(f32, String)>);
@@ -423,12 +451,18 @@ fn emote_aid(
     slots: Res<EmoteSlots>,
     mut asks: MessageWriter<EmoteAsk>,
     mut control: ResMut<crate::control::PlayerControl>,
+    tables: Option<Res<crate::coop_tables::Tables>>,
 ) {
     let Some(now) = aid_time.world_secs() else { return };
+    let on = crate::coop_tables::Tables::in_session(tables.as_deref());
     while aid.0.first().is_some_and(|(t, _)| *t <= now) {
         let (_, step) = aid.0.remove(0);
         info!("test aid NVF_PLAY_TEST_EMOTE: {step}");
         let (head, rest) = step.split_once(':').map_or((step.as_str(), None), |(a, b)| (a, Some(b)));
+        if !on && aid_step_needs_session(head) {
+            info!("emotes: {head}: does nothing, not in a co-op session");
+            continue;
+        }
         match head {
             "cancel" => {
                 asks.write(EmoteAsk::Cancel);
@@ -498,9 +532,22 @@ fn input(
     book: Res<EmoteBook>,
     mut asks: MessageWriter<EmoteAsk>,
     mut control: ResMut<crate::control::PlayerControl>,
+    (tables, mut was_on): (Option<Res<crate::coop_tables::Tables>>, Local<bool>),
 ) {
     let playing = *state.get() == PlayState::Playing;
     let dt = real.delta_secs();
+    // Single player: Emote does nothing (module notes).
+    let on = crate::coop_tables::Tables::in_session(tables.as_deref());
+    if outside_session(&mut w, on, &mut was_on) {
+        asks.write(EmoteAsk::Cancel);
+        info!("emotes: the co-op session ended: the emote playing ends");
+    }
+    if !on {
+        if playing && input.just_pressed(Control::Emote) {
+            info!("emotes: Emote does nothing: not in a co-op session");
+        }
+        return;
+    }
     if !playing {
         if w.wheel.take().is_some() {
             info!("emotes: wheel closed: the game left play");
@@ -637,7 +684,7 @@ pub mod draw {
         mut kit: Local<Option<Kit>>,
     ) {
         let width = windows.single().map_or(1280.0, |w| 960.0 * w.width() / w.height().max(1.0));
-        let key = bindings.as_deref().map_or_else(|| "B".to_string(), |b| b.prompt(crate::bindings::Control::Emote).trim_end_matches(')').to_string());
+        let key = bindings.as_deref().map_or_else(|| "B".to_string(), |b| b.prompt(crate::bindings::Control::Emote).trim_start_matches('[').trim_end_matches(']').to_string());
         let now = wheel.wheel.as_ref().map(|w| Shown {
             picked: w.picked,
             names: slots.slots.iter().map(|s| s.map(|e| (fnv_util::words::tr_str(CATALOG[e].name).to_string(), book.available(e)))).collect(),
@@ -738,6 +785,34 @@ mod tests {
         assert!(d.slots.iter().all(Option::is_some));
         assert_eq!(d.line(), "wave,salute,sit,lay,pushups,shrug,cheer,dance");
         assert_eq!(by_key("3"), by_key("sit"));
+    }
+
+    #[test]
+    fn the_wheel_does_nothing_outside_a_co_op_session() {
+        // Single player: no session ever. An open wheel (a test aid's) and a held Emote are
+        // shut, and nothing is asked to end (no emote could have started).
+        let mut w = EmoteWheel { wheel: Some(Wheel::new()), held: Some(0.1), release: false, aid_open: true };
+        let mut was_on = false;
+        assert!(!outside_session(&mut w, false, &mut was_on));
+        assert!(!w.is_open() && w.held.is_none() && !w.aid_open);
+        assert!(!crate::coop_tables::Tables::in_session(None));
+        assert!(!crate::coop_tables::Tables::in_session(Some(&crate::coop_tables::Tables::default())));
+        // The aid's steps that use the emotes are refused; the view's are not.
+        for step in ["wheel", "pick=3", "release", "wave", "sit", "3"] {
+            assert!(aid_step_needs_session(step), "{step}");
+        }
+        for step in ["1st", "3rd", "close", "cancel"] {
+            assert!(!aid_step_needs_session(step), "{step}");
+        }
+        // In a session the wheel stays; the session ending shuts it and ends the emote.
+        let on = crate::coop_tables::Tables { on: true, ..Default::default() };
+        assert!(crate::coop_tables::Tables::in_session(Some(&on)));
+        let mut w = EmoteWheel { wheel: Some(Wheel::new()), ..Default::default() };
+        assert!(!outside_session(&mut w, true, &mut was_on));
+        assert!(w.is_open() && was_on);
+        assert!(outside_session(&mut w, false, &mut was_on));
+        assert!(!w.is_open() && !was_on);
+        assert!(!outside_session(&mut w, false, &mut was_on), "ended once");
     }
 
     #[test]

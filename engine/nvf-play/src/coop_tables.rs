@@ -45,6 +45,14 @@ pub struct Tables {
 }
 
 impl Tables {
+    /// A co-op session is on, from what this game may have of it (`None`: no co-op side in
+    /// this app). The social layer (the emote wheel, pings, name tags, the interaction
+    /// wheel, one talk per NPC) works only then [owner decision 2026-11-28, #4875: nothing
+    /// in the social layer works in single player].
+    pub fn in_session(tables: Option<&Tables>) -> bool {
+        tables.is_some_and(|t| t.on)
+    }
+
     /// An action for the others (nothing outside a session).
     pub fn send(&mut self, table: u32, game: u8, blob: Vec<u8>) {
         if self.on {

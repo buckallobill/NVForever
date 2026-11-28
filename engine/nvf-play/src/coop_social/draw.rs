@@ -159,7 +159,7 @@ fn draw_wheel(
 /// click or Activate asks, and Esc or Menu Mode cancels.
 pub(super) fn footer(bindings: Option<&crate::bindings::Bindings>) -> String {
     use crate::bindings::{Control, InputDevice};
-    let name = |c: Control, or: &str| bindings.map_or_else(|| or.to_string(), |b| b.prompt(c).trim_end_matches(')').to_string());
+    let name = |c: Control, or: &str| bindings.map_or_else(|| or.to_string(), |b| b.prompt(c).trim_start_matches('[').trim_end_matches(']').to_string());
     match bindings.map(|b| b.device) {
         Some(InputDevice::Controller) => trf("RS: pick      {ask}: ask      {back}: back", &[("ask", &name(Control::Activate, "A")), ("back", &name(Control::MenuMode, "B"))]),
         _ => trf("Mouse: pick      Click or {ask}: ask      Esc or {back}: cancel", &[("ask", &name(Control::Activate, "E")), ("back", &name(Control::MenuMode, "Tab"))]),
@@ -180,7 +180,7 @@ struct BannerShown {
 #[derive(Debug, Clone, PartialEq)]
 enum Lower {
     None,
-    /// "Y) Accept" and "N) Decline", side by side.
+    /// "[Y] Accept" and "[N] Decline", side by side (the key hints' shape, #4495).
     Keys,
     Line(String),
 }
@@ -189,11 +189,11 @@ enum Lower {
 /// controller the buttons Y and X (by the labels in use).
 fn accept(pad: bool) -> String {
     let key = if pad { crate::pad::pad_label(crate::pad::PadInput::Button(GamepadButton::North), crate::pad::pad_labels()) } else { "Y" };
-    trf("{key}) Accept", &[("key", &key)])
+    trf("[{key}] Accept", &[("key", &key)])
 }
 fn decline(pad: bool) -> String {
     let key = if pad { crate::pad::pad_label(crate::pad::PadInput::Button(GamepadButton::West), crate::pad::pad_labels()) } else { "N" };
-    trf("{key}) Decline", &[("key", &key)])
+    trf("[{key}] Decline", &[("key", &key)])
 }
 
 /// The box's measures, interface units under the view's middle: the backing's top and
@@ -355,8 +355,8 @@ mod tests {
 
     #[test]
     fn the_keys_are_named_for_the_device() {
-        assert_eq!((accept(false), decline(false)), ("Y) Accept".to_string(), "N) Decline".to_string()));
-        assert_eq!((accept(true), decline(true)), ("Y) Accept".to_string(), "X) Decline".to_string()), "a controller's buttons, by the Xbox labels");
+        assert_eq!((accept(false), decline(false)), ("[Y] Accept".to_string(), "[N] Decline".to_string()));
+        assert_eq!((accept(true), decline(true)), ("[Y] Accept".to_string(), "[X] Decline".to_string()), "a controller's buttons, by the Xbox labels");
     }
 
     #[test]

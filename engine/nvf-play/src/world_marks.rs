@@ -342,6 +342,12 @@ fn ping_input(
     if *state.get() != PlayState::Playing || !input.just_pressed(Control::Ping) {
         return;
     }
+    // Single player: Ping does nothing [owner decision 2026-11-28, #4875: nothing in the
+    // social layer works in single player].
+    if !crate::coop_tables::Tables::in_session(Some(&tables)) {
+        info!("world marks: Ping does nothing: not in a co-op session");
+        return;
+    }
     let (Some(player), Some(mut phys), Some(loc)) = (player, phys, loc) else { return };
     let crosshair = control.as_deref().and_then(|c| c.crosshair);
     let (eye, dir) = crate::control::Crosshair::ray(crosshair.as_ref(), player.eye(), player.look_dir());
