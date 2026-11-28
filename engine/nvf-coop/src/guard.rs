@@ -63,6 +63,7 @@ pub enum Kind {
     Welcome,
     Full,
     Who,
+    Kicked,
     State,
     Ping,
     Bye,
@@ -122,7 +123,7 @@ pub fn default_rate(kind: Kind) -> Option<Rate> {
         Kind::Rel => r(300.0, 1.5 * REL_PACKETS as f32 * TICKS),
         Kind::Hello => r(10.0, 5.0),
         Kind::Look => r(10.0, 5.0),
-        Kind::Bye | Kind::Welcome | Kind::Full | Kind::Who | Kind::Names => r(10.0, 10.0),
+        Kind::Bye | Kind::Welcome | Kind::Full | Kind::Who | Kind::Kicked | Kind::Names => r(10.0, 10.0),
         Kind::Item(repl_kind::CARRY) => r(60.0, 30.0),
         Kind::Item(repl_kind::LOOSE) => r(20.0, 10.0),
         Kind::Item(repl_kind::DIGEST) => r(16.0, 4.0),
@@ -142,13 +143,14 @@ pub const WORLD_Z: f32 = 100_000.0;
 /// is refused, as is any between that no part here uses ([`item_kind_known`]).
 pub const ITEM_KIND_MAX: u8 = crate::action::ACTION;
 
-/// A reliable item kind this build uses [design: piece 1's 0x00-0x0F, the world's 0x10-0x2F
-/// and the social layer's actions, `crate::action::ACTION`; the ranges between (0x30-0x3F,
-/// and 0x41-0x5F, kept for later parts) are refused until a part with a rule for them is
-/// here; a kind in a used range with no rule is let through to the game side, whose
-/// `crate::repl` unpackers read only their own kind and ignore the rest].
+/// A reliable item kind this build uses [design: piece 1's 0x00-0x0F, the world's 0x10-0x2F,
+/// shared progress's 0x30-0x3F (`crate::progress::kind`) and the social layer's actions,
+/// `crate::action::ACTION`; the range between (0x41-0x5F, kept for later parts) is refused
+/// until a part with a rule for it is here; a kind in a used range with no rule is let
+/// through to the game side, whose `crate::repl` and `crate::progress` unpackers read only
+/// their own kinds and ignore the rest].
 pub fn item_kind_known(kind: u8) -> bool {
-    kind <= 0x2F || kind == crate::action::ACTION
+    kind <= 0x3F || kind == crate::action::ACTION
 }
 /// The longest an emote's clip time can be, seconds [design].
 pub const EMOTE_T_MAX: f32 = 3600.0;
@@ -431,7 +433,7 @@ impl Guard {
             return Err(Reason::Rate);
         }
         match msg {
-            Msg::Welcome { .. } | Msg::Full { .. } | Msg::Who | Msg::Names { .. } => Err(Reason::HostOnly),
+            Msg::Welcome { .. } | Msg::Full { .. } | Msg::Who | Msg::Kicked { .. } | Msg::Names { .. } => Err(Reason::HostOnly),
             Msg::Npcs { .. } | Msg::Lines { .. } | Msg::Presence { .. } | Msg::Wear { .. } | Msg::Clock(_) | Msg::Scene(_) | Msg::Actors { .. } => Err(Reason::HostOnly),
             Msg::Revive { perks, .. } => {
                 *perks &= revive_perk::KNOWN;
@@ -749,15 +751,17 @@ mod tests {
         assert_eq!(g.admit_item(1, &[], now), refused(Reason::Bounds));
         assert_eq!(g.admit_item(1, &[ITEM_KIND_MAX + 1, 0], now), refused(Reason::Bounds));
         assert_eq!(g.admit_item(1, &[0xFF], now), refused(Reason::Bounds));
-        // The ranges no part here uses: 0x30-0x3F and 0x41-0x5F.
-        assert_eq!(g.admit_item(1, &[0x2F, 0], now), Verdict::Accept);
-        for kind in [0x30, 0x3F, 0x41, 0x5F] {
+        // Shared progress's range is used; the range no part here uses, 0x41-0x5F, is not.
+        for kind in [0x2F, 0x30, 0x3F] {
+            assert_eq!(g.admit_item(1, &[kind, 0], now), Verdict::Accept, "kind {kind:#04X}");
+        }
+        for kind in [0x41, 0x5F] {
             assert_eq!(g.admit_item(1, &[kind, 0], now), refused(Reason::Bounds), "kind {kind:#04X}");
         }
         assert_eq!(g.admit_item(1, &[ITEM_KIND_MAX, 0], now), Verdict::Accept);
         assert_eq!(g.admit_item(1, &[0], now), Verdict::Accept);
         let refused: u64 = g.stats().dropped.iter().filter(|&&(k, r, _)| matches!(k, Kind::Item(_)) && r == Reason::Bounds).map(|&(_, _, n)| n).sum();
-        assert_eq!(refused, 7);
+        assert_eq!(refused, 5);
     }
 
     #[test]

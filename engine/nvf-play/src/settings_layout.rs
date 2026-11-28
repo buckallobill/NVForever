@@ -508,6 +508,11 @@ mod shared_table_tests {
         ("name-tag-near", "Gameplay"),
         ("name-tag-far", "Gameplay"),
         ("kill-in-conversation", "Gameplay"),
+        // The co-op connection rows (nvforever `coop/net_settings.rs`).
+        ("coop-connection", "Gameplay"),
+        ("coop-router-port", "Gameplay"),
+        ("coop-relay", "Gameplay"),
+        ("coop-ask", "Gameplay"),
     ];
 
     /// What every tweak's key starts with (#1892's `tweaks.rs`: `concat!("tweak-", $key)`).

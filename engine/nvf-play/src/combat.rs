@@ -448,6 +448,48 @@ pub struct ShotVisual {
 #[derive(Resource, Default)]
 pub struct ShotVisuals {
     pub flying: Vec<ShotVisual>,
+    /// Timed projectile crossings and blast disturbances at the water surface this frame.
+    pub water_entries: Vec<ShotWaterEntry>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ShotWaterEntry {
+    pub point: V3,
+    pub direction: V3,
+    /// The placed water reference, or zero for the continuous cell water.
+    pub receiver: u32,
+    pub kind: WaterImpact,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum WaterImpact {
+    Bullet,
+    HeavyEntry,
+    Blast(SurfaceBlast),
+}
+
+/// The source explosion's resolved EXPL radius, signed depth (positive below the
+/// surface), and the splash reach used when the surface qualified. All are game units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SurfaceBlast {
+    pub radius: f32,
+    pub depth: f32,
+    pub reach: f32,
+}
+
+fn water_entry_kind(motion: Motion, explosive: bool) -> Option<WaterImpact> {
+    match motion {
+        Motion::Missile if !explosive => Some(WaterImpact::Bullet),
+        Motion::Missile | Motion::Lobber if explosive => Some(WaterImpact::HeavyEntry),
+        _ => None,
+    }
+}
+
+/// Instant traces can detonate on their hit immediately while the authored water
+/// splash still waits for its travel time. Omit just the extra delayed entry ring
+/// in that case. Inspect this projectile's step so simultaneous shots stay independent.
+fn timed_water_impact(kind: Option<WaterImpact>, delay: f32, detonated_now: bool) -> Option<WaterImpact> {
+    kind.filter(|kind| !(*kind == WaterImpact::HeavyEntry && delay > 0.0 && detonated_now))
 }
 
 /// A shot threw out a shell casing: the weapon, where the casing starts and its
@@ -1598,6 +1640,7 @@ struct Splash {
     dir: V3,
     weapon: FormId,
     shooter: FormId,
+    water_impact: Option<WaterImpact>,
 }
 
 /// A thrown mine that came to rest ([`ProjEvent::Settled`]): its PROJ, where, the way it
@@ -2537,6 +2580,22 @@ fn disarm(
 /// the height over the feet it leaves from, units [design].
 const LIVE_DROP_SPEED: f32 = 0.05;
 const LIVE_DROP_HEIGHT: f32 = 60.0;
+
+/// The share of its PROJ speed a grenade the player throws leaves with: half, and the
+/// other half by how much of the wind-up (attack pressed to the clip's `Hit` key,
+/// `wind_up` s) attack was held, all of it when attack is still held as the throw leaves
+/// (`holding`) [observed: the original's frag grenade, held 5, 10, 30, 60 and 120 game
+/// loops, flew at 0.52, 0.60, 0.78, 0.99 and 0.98 of its 1,200 units/s, a tap by
+/// `FireWeapon` at about 0.48; Heave Ho! multiplies on top, observer runs o32_throw
+/// 2026-11-25/26, issue #1785, combat-rules.md §5 "Throw speed"; hypothesis: that the
+/// share runs over our clip's wind-up (0.87 s for the frag) and stops at its `Hit` key,
+/// which fits those figures as well as a rise over 1 s, and that only grenades do it].
+fn throw_hold_share(held: f32, wind_up: f32, holding: bool) -> f32 {
+    if holding || wind_up <= 0.0 {
+        return 1.0;
+    }
+    0.5 + 0.5 * (held.max(0.0) / wind_up).min(1.0)
+}
 
 /// Whether `weapon` is a grenade: of the animation type "Grenade Throw (1 Hand)"
 /// [documented: GECK wiki Weapons, Animation Type] and its projectile explodes (as
@@ -4130,6 +4189,11 @@ pub(crate) fn fire(
                 // (perk-entry-points.md §8).
                 let (throw_mult, throw_by) = player_weapon_perk(script.as_deref_mut(), &mut sim, fnv_game::perks::MODIFY_THROWING_VELOCITY, id, 1.0);
                 let throw_mult = throw_mult.max(0.01);
+                // A thrown grenade leaves faster the longer attack was held during its
+                // wind-up (`throw_hold_share`); not VATS mode's throws, which aim at a
+                // mark at the full speed.
+                let hold = (c.self_ammo && vats_shot.is_none() && is_grenade(&c.forms, id))
+                    .then(|| throw_hold_share(c.grenade_hold, cycle.timing.fire_delay, control.trigger));
                 let leaving = if let Some(point) = vats_shot.filter(|_| c.self_ammo) {
                     // VATS mode's throw: from the eye on the low arc that lands on the mark
                     // (vats-mode.md §16.3), at 45° when it is out of reach; at the speed the
@@ -4178,6 +4242,15 @@ pub(crate) fn fire(
                 // A mod's Increase Projectile Speed (weapon-data-fields.md §5).
                 if let Some(m) = w.projectile_speed_mult {
                     shots.iter_mut().for_each(|p| p.speed_up(m));
+                }
+                if let Some(share) = hold {
+                    shots.iter_mut().for_each(|p| p.speed_up(share));
+                    info!(
+                        "combat: {} thrown after a hold of {:.2} s of its {:.2} s wind-up: x {share:.2} of its speed",
+                        w.edid.as_deref().unwrap_or("?"),
+                        c.grenade_hold,
+                        cycle.timing.fire_delay
+                    );
                 }
                 if (throw_mult - 1.0).abs() > 1e-4 {
                     shots.iter_mut().for_each(|p| p.speed_up(throw_mult));
@@ -5862,6 +5935,8 @@ fn leave_space_shots(mut travel: MessageReader<crate::Travel>, mut c: ResMut<Com
     if let Some(s) = snap.as_deref_mut() {
         s.clear_tracking();
     }
+    c.splashes.clear();
+    visuals.water_entries.clear();
     let n = c.flying.len() + c.pending.len() + c.boom.len();
     if n == 0 {
         return;
@@ -6073,7 +6148,10 @@ fn fly(
         });
     }
     (c.vats_blast.toward, c.vats_blast.off) = (0, 0);
-    if c.flying.is_empty() && c.pending.is_empty() && c.boom.is_empty() && c.ghosts.is_empty() {
+    if !visuals.water_entries.is_empty() {
+        visuals.water_entries.clear();
+    }
+    if c.flying.is_empty() && c.pending.is_empty() && c.boom.is_empty() && c.ghosts.is_empty() && c.splashes.is_empty() {
         if !visuals.flying.is_empty() {
             visuals.flying.clear();
         }
@@ -6248,6 +6326,7 @@ fn fly(
                     if f.p.rolling { ", after rolling" } else { "" }
                 );
             }
+            let detonated_now = at_once && f.p.explosion.is_some() && !f.by.harmless && events.iter().any(|event| matches!(event, ProjEvent::Explode { .. }));
             for e in events {
                 match e {
                     ProjEvent::Hit { actor, part, object, point, delay, normal, material } => {
@@ -6279,7 +6358,8 @@ fn fly(
                     ProjEvent::Settled { point, .. } => c.settled.push(SettledMine { proj: f.proj, point, dir: f.dir, actor: f.by.actor }),
                     ProjEvent::Splash { point, dir } => {
                         let delay = if at_once && !beam && speed > 0.0 { vec::len(vec::sub(point, f.origin)) / speed } else { 0.0 };
-                        c.splashes.push(Splash { due: c.time + delay, point, dir, weapon: f.by.weapon, shooter: f.by.actor });
+                        let water_impact = timed_water_impact(water_entry_kind(f.p.motion, f.p.explosion.is_some()), delay, detonated_now);
+                        c.splashes.push(Splash { due: c.time + delay, point, dir, weapon: f.by.weapon, shooter: f.by.actor, water_impact });
                     }
                     // A tracer that meets nothing is drawn to where it ends.
                     ProjEvent::Expired { point } => {
@@ -6398,6 +6478,21 @@ fn fly(
         let dir = if len > 1e-3 { vec::scale(d, 1.0 / len) } else { [0.0, 1.0, 0.0] };
         ShotVisual { id: g.id, projectile: g.proj, owner: g.owner, pos: vec::add(g.from, vec::scale(dir, g.travelled)), dir, beam: g.beam.then_some(len), travelled: g.travelled, strength: beam_strength(g.beam, g.left, g.fade) }
     }));
+    // Record due crossings before this frame's detonations: a lobber can cross
+    // the surface and strike the bed on one step. Keep the authored IPCT and its
+    // sounds in their existing delivery order below.
+    let (splashes, keep): (Vec<Splash>, Vec<Splash>) = std::mem::take(&mut c.splashes).into_iter().partition(|w| w.due <= c.time);
+    c.splashes = keep;
+    for w in &splashes {
+        let Some(kind) = w.water_impact else { continue };
+        // A hitscan crossing can be due after the water it was aimed at streamed out.
+        if let Some((surface, receiver)) = phys.world.water_surface_with_receiver(w.point)
+            .filter(|&(surface, _)| (surface - w.point[2]).abs() < 1.0)
+        {
+            let point = [w.point[0], w.point[1], surface];
+            visuals.water_entries.push(ShotWaterEntry { point, direction: w.dir, receiver, kind });
+        }
+    }
     // Explosions, with those they set off, a bounded number per frame.
     let mut n = 0;
     while let Some(blast_req) = c.boom.pop() {
@@ -6424,11 +6519,15 @@ fn fly(
         // the water shows instead of the blast's own model (no fireball in the
         // original, `WATER_SURFACE_EXPLOSION`); its damage and push are as on land.
         let reach = c.forms.setting("fExplosionSplashRadius").filter(|r| *r > 0.0).unwrap_or(WATER_BLAST_REACH);
-        let water = water_thrown_up(at, phys.world.water_surface_for(at), ground.as_ref().map(|g| g.point[2]), reach);
+        let water = phys.world.water_surface_with_receiver(at).filter(|&(surface, _)| {
+            water_thrown_up(at, Some(surface), ground.as_ref().map(|g| g.point[2]), reach).is_some()
+        });
         let look = if water.is_some() { ExplosionLook::Hidden } else { ExplosionLook::Own };
         effects.2.write(ExplosionFx { explosion: id, point: at, cause: cause.map(|c| c.actor), normal: ground.as_ref().map(|g| g.normal), look, gore: false });
-        if let Some(surface) = water {
+        if let Some((surface, receiver)) = water {
             let point = [at[0], at[1], surface];
+            let blast = SurfaceBlast { radius: x.radius, depth: surface - at[2], reach };
+            visuals.water_entries.push(ShotWaterEntry { point, direction: [0.0; 3], receiver, kind: WaterImpact::Blast(blast) });
             stats.water_blasts += 1;
             info!("combat: explosion {} throws up water at ({:.0}, {:.0}, {:.0}), {:.0} units from the surface", x.edid.as_deref().unwrap_or("?"), point[0], point[1], point[2], (at[2] - surface).abs());
             // No one's: it is not heard as a second blast (detection hears the blast's).
@@ -6639,8 +6738,6 @@ fn fly(
     }
     // Shots that went down into water: the water impact of the weapon's impact data set
     // on the surface, facing up (no decal on water).
-    let (splashes, keep): (Vec<Splash>, Vec<Splash>) = std::mem::take(&mut c.splashes).into_iter().partition(|w| w.due <= c.time);
-    c.splashes = keep;
     if let Some(s) = sfx.as_deref() {
         for w in splashes {
             let impact = c.forms.weapons.get(&w.weapon).and_then(|x| x.impact_dataset).and_then(|set| s.forms.impact_id(set, "water"));
@@ -7135,6 +7232,24 @@ fn sound_edid(sfx: Option<&Sfx>, sound: FormId) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// The original's frag throws by game loops held (issue #1785): 5 / 10 / 30 / 60 loops
+    /// at 0.52 / 0.60 / 0.78 / 0.99 of the PROJ speed; ours over the frag clip's 0.867 s
+    /// wind-up comes within 0.03 of each.
+    #[test]
+    fn a_grenade_flies_faster_the_longer_attack_is_held() {
+        let wind_up = 0.867;
+        for (loops, seen) in [(5.0, 0.52), (10.0, 0.60), (30.0, 0.78)] {
+            let share = super::throw_hold_share(loops / 60.0, wind_up, false);
+            assert!((share - seen).abs() < 0.03, "{loops} loops: {share} against {seen}");
+        }
+        // Held to the throw (60 or 120 loops): the full speed; a tap: half.
+        assert_eq!(super::throw_hold_share(0.867, wind_up, true), 1.0);
+        assert_eq!(super::throw_hold_share(2.0, wind_up, false), 1.0);
+        assert_eq!(super::throw_hold_share(0.0, wind_up, false), 0.5);
+        // A throw with no wind-up keeps its speed.
+        assert_eq!(super::throw_hold_share(0.1, 0.0, false), 1.0);
+    }
+
     #[test]
     fn armour_that_stops_a_shot_stops_its_blood() {
         assert!(super::blood_stopped(10.0, 12.0));
@@ -7844,6 +7959,24 @@ mod tests {
         assert_eq!(jam_anim("ReloadZ").as_deref(), Some("JamZ"));
         assert_eq!(jam_anim("Reload"), None);
         assert_eq!(jam_anim("AttackLeft"), None);
+    }
+
+    #[test]
+    fn explosive_projectile_entry_is_distinct_from_detonation() {
+        assert_eq!(water_entry_kind(Motion::Missile, false), Some(WaterImpact::Bullet));
+        assert_eq!(water_entry_kind(Motion::Missile, true), Some(WaterImpact::HeavyEntry));
+        assert_eq!(water_entry_kind(Motion::Lobber, true), Some(WaterImpact::HeavyEntry));
+        assert_eq!(water_entry_kind(Motion::Beam, true), None);
+        assert_eq!(water_entry_kind(Motion::Flame, false), None);
+    }
+
+    #[test]
+    fn delayed_explosive_trace_cannot_send_a_heavy_entry_after_its_detonation() {
+        let heavy = water_entry_kind(Motion::Missile, true);
+        assert_eq!(timed_water_impact(heavy, 0.15, true), None);
+        assert_eq!(timed_water_impact(heavy, 0.15, false), heavy, "another projectile flying through water without detonating");
+        assert_eq!(timed_water_impact(heavy, 0.0, true), heavy, "a crossing due now precedes the same frame's blast");
+        assert_eq!(timed_water_impact(Some(WaterImpact::Bullet), 0.15, false), Some(WaterImpact::Bullet));
     }
 
     #[test]

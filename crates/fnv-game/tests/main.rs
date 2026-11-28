@@ -43,6 +43,7 @@ mod destruction_stage_blocks;
 mod dialogue_data;
 mod dialogue;
 mod coop_encounters;
+mod coop_kills;
 mod difficulty;
 mod effect_updates;
 mod experience;
@@ -146,6 +147,7 @@ mod ui_loading;
 mod ui_mcm;
 mod ui_more;
 mod ui_ysi;
+mod ysi_expression_text_shift;
 mod unconscious;
 mod unlisted;
 mod vendor_services;
@@ -200,3 +202,12 @@ mod preactivation_events;
 mod preactivation_mutation;
 mod stewie_945_960_970_qualification;
 mod worldspace_climate_imagespace;
+
+// The co-op shared-progress test files.
+mod coop_guest_doctor_data;
+mod coop_host_story;
+mod coop_joint;
+mod coop_quest_items_data;
+mod coop_story_gate;
+mod coop_uniques;
+mod story_guards;

@@ -42,6 +42,7 @@ pub mod coop_subtitles;
 pub mod coop_social;
 pub mod coop_tables;
 pub mod coop_talk;
+pub mod coop_progress;
 pub mod corner_messages;
 pub mod crafting;
 pub mod cursor;

@@ -168,10 +168,11 @@ pub const SECTIONS: &[Section] = &[
     section("Gameplay", Some("Combat"), &["localized-dt-dr"]),
     section("Gameplay", Some("Menus"), &["quantity-select-short-keys"]),
     section("Gameplay", Some("Bug Reports"), &["send-reports", "reports-delete"]),
-    // What only a co-op game uses: the name tags (their switch first, its two distances right
-    // after), then who may hurt an NPC in a conversation. Greyed while the Co-op switch is
-    // off (nvf-play `coop_social::grey_outside_coop`).
-    section("Gameplay", Some("Co-op"), &["coop", "name-tags", "name-tag-near", "name-tag-far", "kill-in-conversation"]),
+    // Co-op: its switch, its networking (docs/design/coop-networking.md §10), then what only
+    // a co-op game uses: the name tags (their switch first, its two distances right after),
+    // then who may hurt an NPC in a conversation. Those last are greyed while the Co-op switch
+    // is off (nvf-play `coop_social::grey_outside_coop`).
+    section("Gameplay", Some("Co-op"), &["coop", "coop-connection", "coop-router-port", "coop-relay", "coop-ask", "name-tags", "name-tag-near", "name-tag-far", "kill-in-conversation"]),
     section("Display", Some("Screen"), &["monitor", "resolution", "hdr-output", "borderless"]),
     section("Display", Some("Frame Rate"), &["display-sync", "frame-cap", "physics-rate"]),
     section("Display", Some("Upscaling and Anti-Aliasing"), &["upscaler", "upscaler-quality", "dlss-model", "fsr-library", "anti-aliasing", "sharpen"]),
@@ -1143,6 +1144,8 @@ pub const NEEDS_CHOICE: &[(&str, &str, &[&str], &str)] = &[
     ("dialogue-background-tint-v1", "dialogue-theme-v1", &["Field Notes"], "Available with the Field Notes theme."),
     ("dialogue-frame-opacity-v1", "dialogue-theme-v1", &["Field Notes"], "Available with the Field Notes theme."),
     ("dialogue-hints-v1", "dialogue-theme-v1", &["Field Notes"], "Available with the Field Notes theme."),
+    ("coop-router-port", "coop-connection", &["Automatic", "Direct only"], "Not with LAN only."),
+    ("coop-relay", "coop-connection", &["Automatic", "Direct only"], "Not with LAN only."),
 ];
 
 /// What a row needs of another row to apply: `parent` on (a switch on, a list past its first

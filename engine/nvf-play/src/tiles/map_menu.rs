@@ -1045,6 +1045,45 @@ fn path_line(from: [f32; 2], to: [f32; 2], usable: Vec2) -> (f32, f32) {
     (d.length(), d.y.atan2(d.x))
 }
 
+/// [documented: GECK wiki `clipwindow`] Under the map clip windows (`MM_Highlight_ClipWindow`,
+/// `MM_WorldMap_ClipWindow`, `MM_LocalMap_ClipWindow`), `<clips> 1 </clips>` on a descendant
+/// opts that tile into clipping by the enclosing `<clipwindow>` rather than self-clipping its
+/// own children. UI mods such as Vanilla UI Plus convert `MM_HighlightLocationName` into a
+/// centered `<rect>` with `<clips> 1 </clips>` and child `<text>` tiles (`original`,
+/// `VUI+Shadow`, `VUI+Outline`), and attach shadow children to `<clips> 1 </clips>` map markers.
+/// Because `fnv_ui::input::clips_children` treats `<clips>` as a self-clipper for legacy
+/// layouts, mark live direct children of `<clips>`-only descendants with
+/// [`fnv_ui::input::OUTSIDE_CLIP`] so they inherit the enclosing `<clipwindow>` instead of
+/// clipping off the left half of centered place names (as `super::list::unclip_row_children`
+/// does for list rows) [design].
+fn unclip_map_window_children(ui: &mut Ui) {
+    for path in [HIGHLIGHT_CLIP, WORLD_CLIP, LOCAL_CLIP] {
+        let Some(window) = resolve_tile(ui, path) else { continue };
+        if !ui.tile(window).get("clipwindow").is_some_and(Value::truthy) {
+            continue;
+        }
+        let mut stack: Vec<TileId> = ui.tile(window).children.clone();
+        while let Some(tile) = stack.pop() {
+            if !ui.is_live(tile) {
+                continue;
+            }
+            if ui.tile(tile).get("clipwindow").is_some_and(Value::truthy) {
+                continue;
+            }
+            let clips_only = ui.tile(tile).get("clips").is_some_and(Value::truthy);
+            let children = ui.tile(tile).children.clone();
+            if clips_only {
+                for &child in &children {
+                    if ui.is_live(child) {
+                        ui.write_changed(child, fnv_ui::input::OUTSIDE_CLIP, Value::Num(1.0));
+                    }
+                }
+            }
+            stack.extend(children);
+        }
+    }
+}
+
 /// The World Map's places, put right on every pass as the hints are: the file works the picture's
 /// place out from its drag and its size from its magnification, and the highlight box's place and
 /// the windows' `visible` from the tab, again whenever what they read changes [design: as
@@ -1769,6 +1808,7 @@ pub(crate) fn page(ui: &mut Ui, new: Option<Shown>, late: bool, tiles: &mut MapT
         place_tabs(ui, &w.tabs);
         // The clip windows on before the panes read what clips them.
         super::item_menu::mark_menu(ui, MAP_MENU, &[QUESTS_LIST, NOTES_LIST, CHALLENGE_LIST, STATIONS_LIST]);
+        unclip_map_window_children(ui);
         if let Some(objectives) = resolve_tile(ui, OBJECTIVES) {
             list::unclip_row_children(ui, objectives, w.objectives.iter().map(|r| r.tile));
         }
@@ -2731,7 +2771,7 @@ mod tests {
     }
 
     fn x_hint() -> HintShown {
-        HintShown { slot: Slot::X, kind: ButtonKind::ShowLocation, word: "Look There".into(), key: "X)".into(), dim: false }
+        HintShown { slot: Slot::X, kind: ButtonKind::ShowLocation, word: "Look There".into(), key: "[X]".into(), dim: false }
     }
 
     /// Quests `n` of them, the first active and the last done, `sel` selected and boxed, with `objectives`
@@ -2812,12 +2852,12 @@ mod tests {
         assert_eq!((at(&ui, &button_path("MM_ButtonA"), "visible"), at(&ui, &button_path("MM_ButtonY"), "visible")), (0.0, 0.0));
         let x = button_path("MM_ButtonX");
         assert_eq!((at(&ui, &x, "visible"), at(&ui, &x, "target")), (1.0, 1.0));
-        assert_eq!((words(&ui, &x, "string"), words(&ui, &x, "_PCButtonText")), ("Look There".to_string(), "X)".to_string()));
+        assert_eq!((words(&ui, &x, "string"), words(&ui, &x, "_PCButtonText")), ("Look There".to_string(), "[X]".to_string()));
         // Measured and checked: three rows whole, the objectives' window from what clips them.
         assert_eq!((t.written.counted.rows, t.written.counted.rows_in_clip), (3, 3));
         let pane = t.written.counted.pane.expect("the objectives' window");
         assert_eq!((pane.min.x, pane.min.y, pane.width(), pane.height()), (490.0, 240.0, 380.0, 200.0));
-        assert!(describe(&t.written).contains("tab quests, 3 rows, \"Quest 1\" selected, 2 objectives, hints: X Look There X)"), "{}", describe(&t.written));
+        assert!(describe(&t.written).contains("tab quests, 3 rows, \"Quest 1\" selected, 2 objectives, hints: X Look There [X]"), "{}", describe(&t.written));
     }
 
     #[test]
@@ -2877,7 +2917,7 @@ mod tests {
         // A controller's set: A then X, whatever their order; a dim hint is no target.
         let (mut ui, mut t) = (tree(), MapTiles::default());
         let mut s = shown(2, 1, 0);
-        s.hints = vec![x_hint(), HintShown { slot: Slot::A, kind: ButtonKind::MakeActive, word: "Pick".into(), key: "A)".into(), dim: true }];
+        s.hints = vec![x_hint(), HintShown { slot: Slot::A, kind: ButtonKind::MakeActive, word: "Pick".into(), key: "[A]".into(), dim: true }];
         run(&mut ui, Some(s), &mut t).unwrap();
         let a = button_path("MM_ButtonA");
         assert_eq!((at(&ui, &a, "visible"), at(&ui, &a, "target"), words(&ui, &a, "string")), (1.0, 0.0, "Pick".to_string()));
@@ -2965,7 +3005,7 @@ mod tests {
             rows: (0..n).map(|i| RowShown { key: 500 + i as u32, text: format!("Item {i}"), filled: false, done: list == ListKind::Challenges && i == 1 }).collect(),
             selected: (n > 0).then_some(sel),
             pane,
-            hints: vec![hint(Slot::X, ButtonKind::NotesFilter, "Fewer", "X)"), hint(Slot::Y, ButtonKind::Challenges, "Feats", "R)")],
+            hints: vec![hint(Slot::X, ButtonKind::NotesFilter, "Fewer", "[X]"), hint(Slot::Y, ButtonKind::Challenges, "Feats", "[R]")],
             ..shown(0, 0, 0)
         }
     }
@@ -3004,8 +3044,8 @@ mod tests {
         assert_eq!((pane.min.x, pane.min.y, pane.width(), pane.height()), (500.0, 245.0, 360.0, 150.0));
         // The hints: the filter on X, the challenges toggle on Y.
         assert_eq!((words(&ui, &button_path("MM_ButtonX"), "string"), words(&ui, &button_path("MM_ButtonY"), "string")), ("Fewer".to_string(), "Feats".to_string()));
-        assert_eq!(words(&ui, &button_path("MM_ButtonY"), "_PCButtonText"), "R)");
-        assert!(describe(&t.written).contains("tab misc notes, 3 rows, \"Item 1\" selected, text, hints: X Fewer X), Y Feats R)"), "{}", describe(&t.written));
+        assert_eq!(words(&ui, &button_path("MM_ButtonY"), "_PCButtonText"), "[R]");
+        assert!(describe(&t.written).contains("tab misc notes, 3 rows, \"Item 1\" selected, text, hints: X Fewer [X], Y Feats [R]"), "{}", describe(&t.written));
         // Further than it can go: held at its end; a page and the wheel are the pane's (data).
         s.pane_first = 500.0;
         run(&mut ui, Some(s), &mut t).unwrap();
@@ -4066,7 +4106,7 @@ mod tests {
 
     #[test]
     fn the_prepared_page_is_read_as_the_tile_page_writes_it() {
-        let hint = |kind, word: &'static str, dim| data::Button { hint: Hint::new(word, "K)".into(), dim), kind };
+        let hint = |kind, word: &'static str, dim| data::Button { hint: Hint::new(word, "[K]".into(), dim), kind };
         let row = |text: &str, mark, done| data::Row { text: text.into(), mark, done };
         let view = data::View {
             tab: data::QUESTS,
@@ -4262,5 +4302,39 @@ mod tests {
         let (mut ui_local, mut t_local) = (tree_changed(with_local), MapTiles::default());
         run(&mut ui_local, Some(local(None, 1.0)), &mut t_local).unwrap();
         assert!(t_local.pieces.iter().all(|p| !matches!(&p.look, Look::Text { string, .. } if string == "Scout Alpha")));
+    }
+
+    #[test]
+    fn centered_highlight_location_name_rect_with_clips_uses_highlight_clipwindow() {
+        // Modded map_menu.xml (e.g. Vanilla UI Plus `VUI+\outline_rect.xml`) turns
+        // `MM_HighlightLocationName` into a `<rect>` with `<clips>&true;</clips>`, `<locus>1</locus>`,
+        // centered at `parent.width / 2`, containing centered `<text>` children (`original`, `VUI+Shadow`).
+        let modded = |x: String| {
+            with_world(x).replace(
+                r#"<text name="MM_HighlightLocationName"><x>80</x><y>170</y><string><copy src="parent()" trait="_Title"/></string></text>"#,
+                r#"<rect name="MM_HighlightLocationName"><locus>1</locus><clips>&true;</clips><justify>&center;</justify><x><copy src="parent()" trait="width"/><div>2</div></x><y>170</y><width><copy src="child(original)" trait="width"/></width><height><copy src="child(original)" trait="height"/></height><string><copy src="parent()" trait="_Title"/></string>
+                    <text name="original"><string><copy src="parent()" trait="string"/></string><justify>&center;</justify><clips>&true;</clips></text>
+                    <text name="VUI+Shadow"><x>1.5</x><y>1.5</y><string><copy src="sibling(original)" trait="string"/></string><justify>&center;</justify><clips>&true;</clips></text>
+                  </rect>"#,
+            )
+        };
+        let (mut ui, mut t) = (tree_changed(modded), MapTiles::default());
+        let mut place = marker(10, [0.5, 0.5], true);
+        place.name = "Trading Shoppe".into();
+        let s = world(1.0, [0.5, 0.5], vec![place]);
+        run(&mut ui, Some(s), &mut t).unwrap();
+        let orig = ui.find_tile("MapMenu/GLOW_BRANCH/MM_MainRect/MM_Highlight_ClipWindow/MM_MapHighlightBox/MM_HighlightLocationName/original").unwrap();
+        let shadow = ui.find_tile("MapMenu/GLOW_BRANCH/MM_MainRect/MM_Highlight_ClipWindow/MM_MapHighlightBox/MM_HighlightLocationName/VUI+Shadow").unwrap();
+        let orig_piece = t.pieces.iter().find(|p| p.tile == orig).expect("original location label piece");
+        let shadow_piece = t.pieces.iter().find(|p| p.tile == shadow).expect("shadow location label piece");
+        let clip = orig_piece.clip.expect("label stays clipped to MM_Highlight_ClipWindow");
+        assert_eq!((clip.left, clip.top, clip.width, clip.height), (40.0, 90.0, 855.0, 500.0));
+        assert_eq!(shadow_piece.clip, Some(clip));
+        // Centered text starts half its width to the left of the highlight center (40 + 427.5 = 467.5),
+        // so the entire left half of the place name sits well inside MM_Highlight_ClipWindow.
+        let center_x = 40.0 + 855.0 / 2.0;
+        assert!(orig_piece.rect.width > 100.0, "expected measured text width, got {}", orig_piece.rect.width);
+        assert!(orig_piece.rect.left < center_x - 50.0, "left half should extend left of center: left={}, center={}", orig_piece.rect.left, center_x);
+        assert!(orig_piece.rect.left >= clip.left && orig_piece.rect.left + orig_piece.rect.width <= clip.left + clip.width);
     }
 }
