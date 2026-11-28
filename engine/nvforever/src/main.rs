@@ -56,6 +56,7 @@ mod authored_test_records;
 mod anim_paths;
 mod actor_feet;
 mod tumble;
+mod menu_view;
 mod turret_aim;
 mod actor_jumps;
 mod actor_materials;
@@ -259,6 +260,8 @@ mod stress_sample;
 mod profile;
 mod perf_overlay;
 mod occlusion;
+#[cfg(any(test, debug_assertions, feature = "dev-aids"))]
+mod room_beam_census;
 mod rooms;
 mod terrain;
 mod terrain_surface;
@@ -2445,6 +2448,8 @@ fn run_with_args(line: Vec<String>) -> AppExit {
             app.add_plugins(detection::DetectionPlugin);
             // The weather's wind on the bodies that respond to it, the tumbleweeds (tumble.rs).
             app.add_plugins(tumble::TumblePlugin);
+            // The main menu draws no 3D behind its slideshow (menu_view.rs, #4918).
+            app.add_plugins(menu_view::MenuViewPlugin);
             // Alerted actors draw their weapons and look at what alerted them (alert.rs).
             app.add_plugins(alert::AlertPlugin);
             // Fighters look angry (combat_face.rs; lips.rs draws the face).
@@ -2493,6 +2498,8 @@ fn run_with_args(line: Vec<String>) -> AppExit {
             app.add_plugins(anim_paths::AnimPathsPlugin);
         }
     }
+    #[cfg(any(test, debug_assertions, feature = "dev-aids"))]
+    room_beam_census::install(&mut app);
     if play.is_some() {
         app.add_systems(Update, (script_weather, worldspace::script_sky, sky::fade_cadence, sky_follows_game, sky::sync_weather_fog, sky::sync_weather_visuals).chain().before(sky::update_sky));
         #[cfg(any(test, debug_assertions, feature = "dev-aids"))]
