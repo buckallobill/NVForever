@@ -37824,11 +37824,11 @@ forbid = [
 [[scenario]]
 name = "poker-tables-ultraluxe"
 source = "[design, #4762] engine/nvf-play/src/poker_tables.rs `RULES`, nvforever poker_view.rs `dress`: in ULCasino the row off leaves every blackjack table; turned on, its two northmost tables (0x0011887B, 0x00171653) become poker tables drawn in the blackjack table's place; turned off again, they are taken down"
-note = "Looking north at 0x0011887B from 260 units south. The row is turned on during a pause from 6 to 8 s and off again during one from 13 to 15 s (the settings aid's toggle), so the home's setting ends as it started. Shots: before (off), on, after (off)"
+note = "Looking north at 0x0011887B from 260 units south; no AI packages, or the White Glove greeter talks to the player and turns the view. The row is turned on during a pause from 6 to 8 s and off again during one from 13 to 15 s (the settings aid's toggle), so the home's setting ends as it started. Shots: before (off), on, after (off)"
 areas = ["poker", "casino"]
 paths = ["engine/nvf-play/src/poker_tables.rs", "engine/nvforever/src/poker_view.rs"]
 env = { NVF_PLAY_TEST_SCRIPT_MENUS = "0.3", NVF_PLAY_TEST_PAUSE = "6:8,13:15", NVF_PLAY_TEST_SETTINGS = "7:poker-tables,14:poker-tables", NVF_PLAY_TEST_SHOTS = "5:poker_ultraluxe_off.png,11:poker_ultraluxe_on.png,18:poker_ultraluxe_off_again.png" }
-args = ["--cell", "ULCasino", "--play", "--no-voice", "--no-messages", "--pos=2677,3147,7656", "--heading", "0", "--pitch=-12"]
+args = ["--cell", "ULCasino", "--play", "--no-voice", "--no-messages", "--no-npc-packages", "--pos=2677,3147,7656", "--heading", "0", "--pitch=-12"]
 run_seconds = 20
 expect = [
   { re = 'poker view: The Ultra-Luxe poker table 0x(0011887B|00171653) drawn in its blackjack table', count = 2, label = "the swapped table(s) drawn as poker tables once the row is on" },
